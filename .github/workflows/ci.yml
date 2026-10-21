@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+      - name: ruff
+        run: ruff check src tests
+
+  compile:
+    # pytest only compiles modules it imports, so syntax problems in the
+    # fixture builder or a rarely-imported module can hide until release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: compile everything, warnings are errors
+        # -W is an interpreter flag, not a compileall option. Putting it after
+        # -m compileall makes the command fail with "unrecognized arguments"
+        # rather than actually checking anything.
+        run: python -W error::SyntaxWarning -m compileall -q src tests fixtures examples tools
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[engine,dev]"
+
+      - name: build media fixtures (offline, ffmpeg only)
+        # build_media.py needs network for edge-tts; CI uses the offline
+        # synthesiser so the build is hermetic. Tests that require realistic
+        # speech skip with an instruction rather than failing.
+        run: python fixtures/build_offline.py
+
+      - name: verify fixtures actually exist
+        # A skipped fixture must fail the build, not silently pass a green run
+        # with half the suite missing.
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          need = ["film.mp4", "silent.mp4", "truth.srt", "late.srt",
+                  "early.srt", "fps.srt"]
+          missing = [n for n in need if not (Path("fixtures/media")/n).exists()]
+          if missing:
+              raise SystemExit(f"fixtures missing: {missing}")
+          print("all fixtures present")
+          PY
+
+      - name: tests
+        run: pytest -q
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: wheel contains the UI asset
+        run: |
+          python - <<'PY'
+          import zipfile, glob
+          whl = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(whl).namelist()
+          assert any(n.endswith("web/index.html") for n in names), names
+          print(whl, len(names), "entries")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*

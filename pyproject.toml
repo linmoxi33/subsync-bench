@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subsync-bench"
+version = "0.1.0"
+description = "A workbench for subtitle alignment: inspect, align, preview, compare, export."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Vespera" }]
+keywords = ["subtitles", "srt", "sync", "ffsubsync", "workbench"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Video",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+engine = ["ffsubsync>=0.5.1"]
+web = ["fastapi>=0.110", "uvicorn>=0.27", "python-multipart>=0.0.9"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.scripts]
+subsync-bench = "subsync_bench.cli:main"
+subsync-bench-serve = "subsync_bench.server:main"
+
+[project.urls]
+Homepage = "https://github.com/linmoxi33/subsync-bench"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+subsync_bench = ["web/*.html", "web/*.css", "web/*.js"]
+
+[tool.ruff]
+# Pin the ruleset explicitly. Without this, ruff inherits whatever global config
+# the machine happens to have, so CI and a developer box disagree about what
+# "clean" means — and a passing local run proves nothing about the build.
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "W",   # pycodestyle warnings
+  "I",   # import sorting
+  "B",   # bugbear
+  "UP",  # pyupgrade
+  "C4",  # comprehensions
+  "SIM", # simplify
+  "RUF", # ruff-specific
+]
+ignore = [
+  "E501",   # line length is enforced by the formatter, not by eye
+  "B008",   # FastAPI's File(...)/Form(...) defaults are the documented idiom
+  "SIM105", # contextlib.suppress is not always clearer than try/except/pass
+  # RUF046 assumes round() returns int. That holds for Python floats but not for
+  # numpy scalars, and these code paths accept values derived from numpy arrays.
+  # int(round(x)) is therefore load-bearing, not redundant.
+  "RUF046",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "SIM117", "UP028"]
+"tools/mutate.py" = ["B012"]  # the finally-return is the intended abort path
+
+[tool.coverage.run]
+source = ["subsync_bench"]
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", "raise NotImplementedError"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "error::pytest.PytestUnhandledThreadExceptionWarning",
+]

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>subsync-bench · 字幕对齐工作台</title>
+<style>
+:root{
+  --bg:#14110f; --panel:#1d1916; --panel2:#252019; --ink:#f2e9dc;
+  --muted:#a2937f; --dim:#6d6154;
+  --amber:#e8a33d; --terra:#c9613c; --sage:#8fa876;
+  --line:#332b25; --line2:#443a31;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ---- shell ---- */
+.shell{display:grid;grid-template-columns:264px 1fr;min-height:100vh}
+aside{background:var(--panel);border-right:1px solid var(--line);
+  padding:22px 18px;display:flex;flex-direction:column;gap:22px}
+.brand{display:flex;align-items:baseline;gap:8px}
+.brand b{font-size:15px;letter-spacing:-0.01em;font-weight:650}
+.brand span{font-size:10px;color:var(--dim);letter-spacing:0.12em;text-transform:uppercase}
+main{padding:26px 30px 70px;min-width:0}
+
+/* ---- steps ---- */
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.steps li{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:7px;
+  font-size:13px;color:var(--dim);position:relative}
+.steps li .n{width:19px;height:19px;border-radius:50%;border:1px solid var(--line2);
+  display:grid;place-items:center;font-size:10px;flex:none;margin-top:1px;
+  color:var(--dim);font-family:ui-monospace,monospace}
+.steps li.active{background:var(--panel2);color:var(--ink)}
+.steps li.active .n{border-color:var(--amber);color:var(--amber)}
+.steps li.done{color:var(--muted)}
+.steps li.done .n{border-color:var(--sage);color:var(--sage)}
+.steps li.done .n::after{content:"✓";font-size:10px}
+.steps li.done .n span{display:none}
+.steps li .sub{display:block;font-size:11px;color:var(--dim);margin-top:1px}
+
+/* ---- inputs ---- */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
+input[type=file]{font-size:12px;color:var(--muted);background:var(--panel2);
+  border:1px dashed var(--line2);border-radius:7px;padding:9px;width:100%}
+input[type=file]::file-selector-button{background:var(--line2);color:var(--ink);
+  border:0;border-radius:5px;padding:5px 10px;margin-right:10px;font-size:11px;
+  cursor:pointer;font-family:inherit}
+input[type=text],input[type=number]{background:var(--panel2);border:1px solid var(--line2);
+  color:var(--ink);border-radius:6px;padding:7px 9px;font-size:13px;width:100%;
+  font-family:ui-monospace,monospace}
+input:focus{outline:1px solid var(--amber);outline-offset:-1px}
+button{font-family:inherit;font-size:13px;border-radius:7px;padding:9px 16px;
+  border:1px solid var(--line2);background:var(--panel2);color:var(--ink);cursor:pointer;
+  transition:background .12s,border-color .12s}
+button:hover:not(:disabled){background:#2e271f;border-color:var(--muted)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--amber);border-color:var(--amber);color:#1a1410;font-weight:600}
+button.primary:hover:not(:disabled){background:#f0b355;border-color:#f0b355}
+button.danger{color:var(--terra);border-color:rgba(201,97,60,.4)}
+.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+
+/* ---- cards ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:20px 22px;margin-bottom:18px}
+.card>h2{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);
+  margin:0 0 15px;font-weight:600;display:flex;justify-content:space-between;
+  align-items:center;gap:12px}
+.card>h2 .hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:12px;
+  color:var(--dim)}
+
+/* ---- metrics ---- */
+.metrics{display:flex;gap:12px;flex-wrap:wrap}
+.metric{background:var(--panel2);border-radius:8px;padding:12px 16px;min-width:120px;
+  border:1px solid transparent}
+.metric .n{font-size:20px;font-family:ui-monospace,monospace;letter-spacing:-0.02em;
+  line-height:1.2}
+.metric .l{font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;
+  margin-top:4px}
+.metric.good .n{color:var(--sage)} .metric.warn .n{color:var(--amber)}
+.metric.bad .n{color:var(--terra)}
+
+/* ---- timeline ---- */
+.timeline-wrap{background:#100e0c;border-radius:8px;padding:8px;overflow:hidden}
+.timeline-wrap svg{display:block;width:100%;height:auto}
+.zoom{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--dim)}
+.zoom input[type=range]{width:130px;accent-color:var(--amber)}
+
+/* ---- revisions ---- */
+table{width:100%;border-collapse:collapse;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+th{text-align:left;color:var(--muted);font-weight:500;padding:8px 9px;
+  border-bottom:1px solid var(--line);font-size:10px;letter-spacing:0.1em;
+  text-transform:uppercase;white-space:nowrap}
+td{padding:7px 9px;border-bottom:1px solid rgba(51,43,37,.55);vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:rgba(232,163,61,.06)}
+tbody tr.sel td{background:rgba(232,163,61,.11)}
+tbody tr.sel td:first-child{box-shadow:inset 2px 0 0 var(--amber)}
+.st-ok{color:var(--sage)} .st-suspect{color:var(--amber)}
+.st-rejected{color:var(--terra)}
+td.txt{color:var(--muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-family:inherit}
+tr.suspect td{background:rgba(201,97,60,.09)}
+tr.suspect td:nth-child(5){color:var(--terra);font-weight:600}
+
+/* ---- findings ---- */
+.findings{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:7px}
+.findings li{padding:9px 12px;border-left:2px solid var(--line2);background:var(--panel2);
+  border-radius:0 6px 6px 0;font-size:12.5px}
+.findings li.block{border-left-color:var(--terra)}
+.findings li.warn{border-left-color:var(--amber)}
+.findings li.info{border-left-color:var(--dim)}
+.findings code{color:var(--amber);font-size:11px;letter-spacing:0.04em;
+  font-family:ui-monospace,monospace}
+
+/* ---- misc ---- */
+.muted{color:var(--muted)} .dim{color:var(--dim)}
+pre{background:#100e0c;border:1px solid var(--line);border-radius:7px;padding:13px;
+  overflow:auto;font-size:11.5px;max-height:300px;color:var(--muted);
+  font-family:ui-monospace,monospace;margin:0}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--panel2);border:1px solid var(--line2);border-radius:8px;
+  padding:11px 18px;font-size:13px;box-shadow:0 8px 28px rgba(0,0,0,.5);
+  opacity:0;transition:all .22s;z-index:99;max-width:min(560px,90vw)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:rgba(201,97,60,.5);color:#f0b3a0}
+.toast.ok{border-color:rgba(143,168,118,.5);color:#c6d8b3}
+.progress{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:12px}
+.progress .bar{height:100%;width:0;background:var(--amber);transition:width .3s}
+.empty{color:var(--dim);font-size:13px;text-align:center;padding:26px 0}
+.hidden{display:none !important}
+.danger-zone{border-top:1px solid var(--line);margin-top:16px;padding-top:14px;
+  display:flex;flex-direction:column;gap:9px}
+.danger-zone label{font-size:12px;color:var(--muted);display:flex;gap:8px;
+  align-items:flex-start;cursor:pointer}
+.danger-zone input[type=checkbox]{margin-top:3px;accent-color:var(--terra)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><b>subsync-bench</b><span>v0.1</span></div>
+
+    <ol class="steps" id="steps">
+      <li data-step="1" class="active"><span class="n"><span>1</span></span>
+        <span>导入<span class="sub">视频 + 字幕</span></span></li>
+      <li data-step="2"><span class="n"><span>2</span></span>
+        <span>对齐<span class="sub">测量并记录一次尝试</span></span></li>
+      <li data-step="3"><span class="n"><span>3</span></span>
+        <span>预览<span class="sub">时间轴 + 逐条差异</span></span></li>
+      <li data-step="4"><span class="n"><span>4</span></span>
+        <span>对比<span class="sub">选择要导出的版本</span></span></li>
+      <li data-step="5"><span class="n"><span>5</span></span>
+        <span>导出<span class="sub">复检后写出成品</span></span></li>
+    </ol>
+
+    <div>
+      <div class="field">
+        <label>项目名</label>
+        <input type="text" id="projName" value="my-project">
+      </div>
+      <div class="field">
+        <label>视频文件</label>
+        <input type="file" id="videoFile" accept="video/*,.mkv,.mp4,.avi,.mov">
+      </div>
+      <div class="field">
+        <label>字幕文件</label>
+        <input type="file" id="subFile" accept=".srt,.vtt,.ass,.ssa,.txt">
+      </div>
+      <button class="primary" id="btnUpload" style="width:100%">建立项目</button>
+      <div class="progress hidden" id="upProgress"><div class="bar"></div></div>
+    </div>
+
+    <div>
+      <div class="field">
+        <label>或打开已有项目</label>
+        <input type="text" id="openPath" placeholder="项目目录路径">
+      </div>
+      <button id="btnOpen" style="width:100%">打开</button>
+    </div>
+
+    <div style="margin-top:auto;font-size:11px;color:var(--dim);line-height:1.7">
+      <div id="envInfo">检测环境中…</div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="welcome">
+      <div class="card">
+        <h2>工作台说明<span class="hint">为什么不是「一条命令」</span></h2>
+        <p class="muted" style="margin:0 0 14px;max-width:70ch">
+          原工具只做一件事：把字幕平移去匹配视频音轨，然后打印一个偏移量。
+          它不知道结果对不对，也从不拒绝。这个工作台把整件事包起来：
+          <b style="color:var(--ink)">导入 → 测量 → 对齐 → 预览 → 对比 → 导出</b>，
+          每一步都能单独复核，最终导出前还会重新测量一遍。
+        </p>
+        <ul class="findings">
+          <li class="block"><code>静音参考</code> 原工具返回 0 并写出一个没对齐的文件；这里直接拒绝。</li>
+          <li class="block"><code>错片字幕</code> 置信度会落到 0.4 以下；这里在 0.55 处拦下。</li>
+          <li class="warn"><code>局部错位</code> 整体平移救不了个别条目；这里逐条标出是哪几条。</li>
+          <li class="info"><code>导出复检</code> 视频被换过就拒绝导出，而不是信任旧回执。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="work" class="hidden">
+      <div class="card">
+        <h2>当前项目<span class="hint" id="projPath"></span></h2>
+        <div class="metrics" id="metrics"></div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" id="btnAlign">开始对齐</button>
+          <button id="btnReport">生成完整报告</button>
+        </div>
+        <div class="progress hidden" id="alignProgress"><div class="bar"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>时间轴
+          <span class="zoom">
+            <span>视野</span>
+            <input type="range" id="zoom" min="5" max="100" value="100">
+            <span class="mono" id="zoomLabel">全部</span>
+          </span>
+        </h2>
+        <div class="timeline-wrap" id="timeline"><div class="empty">先运行一次对齐</div></div>
+      </div>
+
+      <div class="card">
+        <h2>版本对比<span class="hint">点击一行切换预览</span></h2>
+        <div id="revs"><div class="empty">还没有版本</div></div>
+      </div>
+
+      <div class="card">
+        <h2>信任判定</h2>
+        <ul class="findings" id="verdict"><li class="info">尚未对齐</li></ul>
+      </div>
+
+      <div class="card">
+        <h2>逐条差异<span class="hint" id="diffCount"></span></h2>
+        <div style="max-height:420px;overflow:auto" id="diff">
+          <div class="empty">先运行一次对齐</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>导出</h2>
+        <div class="row">
+          <button class="primary" id="btnExport">导出当前版本</button>
+          <button id="btnDownload" disabled>下载 .srt</button>
+        </div>
+        <div class="danger-zone">
+          <label><input type="checkbox" id="optOverride">
+            <span>允许导出被判定为「不可信」的版本（我已人工核对过）</span></label>
+          <label><input type="checkbox" id="optSkipRecheck">
+            <span>跳过导出前复检（危险：仅用于已离线确认过的归档场景）</span></label>
+        </div>
+        <pre class="hidden" id="exportOut"></pre>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let state = { project: null, revisions: [], selected: null, lastExport: null };
+
+function toast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (kind || '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.className = 'toast ' + (kind || ''); }, 4200);
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = null; }
+  if (!r.ok) {
+    const e = (data && data.error) || { message: 'HTTP ' + r.status };
+    const err = new Error(e.message || 'request failed');
+    err.payload = e;
+    throw err;
+  }
+  return data;
+}
+
+function setStep(n) {
+  document.querySelectorAll('#steps li').forEach(li => {
+    const i = +li.dataset.step;
+    li.classList.toggle('done', i < n);
+    li.classList.toggle('active', i === n);
+  });
+}
+
+function fmt(t) {
+  if (t === null || t === undefined) return '—';
+  const sign = t < 0 ? '-' : '';
+  t = Math.abs(t);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = (t % 60);
+  return sign + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' +
+         s.toFixed(2).padStart(5, '0');
+}
+
+// ---------- env ----------
+(async () => {
+  try {
+    const h = await api('/api/health');
+    const bits = [];
+    bits.push(h.ffmpeg ? 'ffmpeg ✓' : 'ffmpeg ✗');
+    bits.push(h.ffprobe ? 'ffprobe ✓' : 'ffprobe ✗（可选）');
+    bits.push(h.engine ? 'engine ' + h.engine_version : 'engine ✗');
+    $('envInfo').innerHTML = bits.join('<br>');
+  } catch (e) {
+    $('envInfo').textContent = '无法连接服务';
+  }
+})();
+
+// ---------- upload ----------
+$('btnUpload').onclick = async () => {
+  const v = $('videoFile').files[0], s = $('subFile').files[0];
+  if (!v || !s) return toast('请选择视频和字幕两个文件', 'err');
+  const fd = new FormData();
+  fd.append('video', v);
+  fd.append('subtitle', s);
+  fd.append('name', $('projName').value || 'project');
+
+  $('btnUpload').disabled = true;
+  $('upProgress').classList.remove('hidden');
+  $('upProgress').querySelector('.bar').style.width = '35%';
+  try {
+    const data = await api('/api/upload', { method: 'POST', body: fd });
+    $('upProgress').querySelector('.bar').style.width = '100%';
+    state.project = data.project;
+    $('welcome').classList.add('hidden');
+    $('work').classList.remove('hidden');
+    $('projPath').textContent = data.project;
+    renderInspection(data.inspection);
+    setStep(2);
+    toast('项目已建立：' + data.inspection.subtitle.cue_count + ' 条字幕', 'ok');
+  } catch (e) {
+    $('upProgress').classList.add('hidden');
+    toast('导入失败：' + e.message, 'err');
+  } finally {
+    $('btnUpload').disabled = false;
+    setTimeout(() => $('upProgress').classList.add('hidden'), 800);
+  }
+};
+
+function renderInspection(insp) {
+  const s = insp.subtitle, e = insp.envelope;
+  const m = [];
+  m.push(metric(s.cue_count, '字幕条数'));
+  m.push(metric(s.encoding, '编码'));
+  if (e) m.push(metric(e.duration.toFixed(1) + 's', '视频时长'));
+  if (e) m.push(metric(e.is_silent ? '静音' : e.speech_ratio.toFixed(2), '语音占比',
+                       e.is_silent ? 'bad' : ''));
+  $('metrics').innerHTML = m.join('');
+  const warn = (insp.warnings || []).concat(insp.structural_problems || []);
+  if (warn.length) {
+    $('verdict').innerHTML = warn.map(w =>
+      `<li class="warn">${esc(w)}</li>`).join('');
+  }
+}
+
+function metric(n, l, cls) {
+  return `<div class="metric ${cls || ''}"><div class="n">${esc(String(n))}</div>` +
+         `<div class="l">${esc(l)}</div></div>`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ---------- open existing ----------
+async function openProject(path) {
+  try {
+    const d = await api('/api/revs?project=' + encodeURIComponent(path));
+    state.project = path;
+    state.revisions = d.revisions;
+    state.selected = d.selected;
+    $('welcome').classList.add('hidden');
+    $('work').classList.remove('hidden');
+    $('projPath').textContent = path;
+    renderRevs();
+    if (d.revisions.length) {
+      await loadPreview();
+      setStep(d.selected ? 5 : 4);
+      // a reopened project already has a verdict; show it instead of "not aligned"
+      const rev = state.revisions.find(r => r.id === (d.selected || state.revisions.at(-1).id));
+      if (rev) renderVerdictForRevision(rev);
+    } else {
+      setStep(2);
+    }
+    return true;
+  } catch (e) {
+    toast('打开失败：' + e.message, 'err');
+    return false;
+  }
+}
+
+$('btnOpen').onclick = async () => {
+  const p = $('openPath').value.trim();
+  if (!p) return toast('请填写项目目录', 'err');
+  if (await openProject(p)) toast('已打开项目', 'ok');
+};
+
+// resume from ?project= so a reload does not lose the session
+(async () => {
+  const q = new URLSearchParams(location.search).get('project');
+  if (q) {
+    $('openPath').value = q;
+    await openProject(q);
+  }
+})();
+
+// ---------- align ----------
+$('btnAlign').onclick = async () => {
+  if (!state.project) return;
+  $('btnAlign').disabled = true;
+  $('alignProgress').classList.remove('hidden');
+  const bar = $('alignProgress').querySelector('.bar');
+  bar.style.width = '15%';
+  const tick = setInterval(() => {
+    const w = parseFloat(bar.style.width) || 15;
+    bar.style.width = Math.min(w + 7, 88) + '%';
+  }, 900);
+  try {
+    const data = await api('/api/align', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: state.project })
+    });
+    bar.style.width = '100%';
+    renderVerdict(data.verdict, data.revision);
+    await refresh();
+    setStep(3);
+    if (data.ok) toast('对齐完成：偏移 ' + data.revision.offset.toFixed(2) + 's', 'ok');
+    else toast('已记录，但被判定为不可信', 'err');
+  } catch (e) {
+    toast('对齐失败：' + e.message, 'err');
+    $('verdict').innerHTML = `<li class="block"><code>${esc(e.payload?.code || 'ERROR')}</code> — ${esc(e.message)}</li>`;
+  } finally {
+    clearInterval(tick);
+    $('btnAlign').disabled = false;
+    setTimeout(() => $('alignProgress').classList.add('hidden'), 700);
+  }
+};
+
+function renderVerdict(verdict, rev) {
+  if (!verdict) return;
+  const items = [];
+  (verdict.blocking || []).forEach(f =>
+    items.push(`<li class="block"><code>${esc(f.code)}</code> — ${esc(f.message)}</li>`));
+  (verdict.warnings || []).forEach(f =>
+    items.push(`<li class="warn"><code>${esc(f.code)}</code> — ${esc(f.message)}</li>`));
+  (verdict.findings || []).filter(f => f.severity === 'info').forEach(f =>
+    items.push(`<li class="info"><code>${esc(f.code)}</code> — ${esc(f.message)}</li>`));
+  $('verdict').innerHTML = items.length ? items.join('') :
+    '<li class="info">全部检查通过</li>';
+}
+
+function renderVerdictForRevision(rev) {
+  // Derive findings from the stored receipt. rejected_reason already lists the
+  // blocking rule codes, so emit each code once rather than adding a generic
+  // "rejected" line on top of the specific ones.
+  const items = [];
+  const codes = (rev.rejected_reason || '').split(';').map(s => s.trim()).filter(Boolean);
+  const rs = rev.residual_summary || {};
+
+  const describe = (code) => {
+    if (code === 'R2_LOW_CONFIDENCE') {
+      return `置信度 ${rev.confidence.toFixed(3)} 低于 0.55 阈值`;
+    }
+    if (code === 'R3_RESIDUAL_OFFSET') {
+      return `对齐后仍需移动 ${(rev.residual_offset || 0).toFixed(3)}s，引擎未真正应用偏移`;
+    }
+    if (code === 'R4_OFFSET_TOO_LARGE') return '偏移超出搜索窗口';
+    if (code === 'R5_FRAMERATE_IMPLAUSIBLE') {
+      return `帧率缩放 ${rev.framerate_scale.toFixed(4)} 不合理`;
+    }
+    if (code === 'R6_CUE_LOSS') return '字幕条数发生变化，有文本丢失';
+    if (code === 'R1_NO_SPEECH') return '参考音轨没有可检测的语音';
+    return '未通过信任判定';
+  };
+
+  codes.forEach(c => {
+    items.push(`<li class="block"><code>${esc(c)}</code> — ${esc(describe(c))}` +
+      `<br><span class="dim" style="font-size:11.5px">该版本导出会被拒绝</span></li>`);
+  });
+
+  if (rs.suspect_count) {
+    items.push(`<li class="warn"><code>R7_SCENE_SPLICE_SUSPECTED</code> — ` +
+      `${rs.suspect_count}/${rs.cue_count} 条字幕在整体平移后仍然错位，` +
+      `整体平移无法修复，源字幕可能来自另一个剪辑版本</li>`);
+  }
+  if (!items.length) {
+    items.push('<li class="info">该版本已通过全部检查（置信度 ' +
+      rev.confidence.toFixed(3) + '，无可疑条目）</li>');
+  }
+  $('verdict').innerHTML = items.join('');
+}
+
+// ---------- refresh ----------
+async function refresh() {
+  if (!state.project) return;
+  const d = await api('/api/revs?project=' + encodeURIComponent(state.project));
+  state.revisions = d.revisions;
+  state.selected = d.selected;
+  renderRevs();
+  if (d.revisions.length) {
+    await loadPreview();
+    setStep(state.selected ? 5 : 4);
+  }
+}
+
+function renderRevs() {
+  if (!state.revisions.length) {
+    $('revs').innerHTML = '<div class="empty">还没有版本</div>';
+    return;
+  }
+  const head = '<table><thead><tr><th>版本</th><th>状态</th><th>偏移</th>' +
+    '<th>缩放</th><th>置信度</th><th>可疑</th><th>说明</th></tr></thead><tbody>';
+  const rows = state.revisions.map(r => {
+    const sel = r.id === (state.selected || (state.revisions.at(-1) || {}).id);
+    return `<tr data-id="${esc(r.id)}" class="${sel ? 'sel' : ''}">` +
+      `<td>${esc(r.id)}</td>` +
+      `<td class="st-${esc(r.status)}">${esc(r.status)}</td>` +
+      `<td>${r.offset >= 0 ? '+' : ''}${r.offset.toFixed(3)}s</td>` +
+      `<td>${r.framerate_scale.toFixed(5)}</td>` +
+      `<td>${r.confidence.toFixed(3)}</td>` +
+      `<td>${(r.residual_summary || {}).suspect_count || 0}</td>` +
+      `<td class="txt">${esc(r.label || '')}</td></tr>`;
+  }).join('');
+  $('revs').innerHTML = head + rows + '</tbody></table>';
+  $('revs').querySelectorAll('tr[data-id]').forEach(tr => {
+    tr.onclick = async () => {
+      try {
+        await api('/api/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: state.project, revision: tr.dataset.id })
+        });
+        state.selected = tr.dataset.id;
+        renderRevs();
+        const rev = state.revisions.find(r => r.id === tr.dataset.id);
+        if (rev) renderVerdictForRevision(rev);
+        await loadPreview();
+        setStep(5);
+      } catch (e) { toast('切换失败：' + e.message, 'err'); }
+    };
+  });
+}
+
+// ---------- preview ----------
+let zoomPct = 100;
+async function loadPreview() {
+  const revId = state.selected || (state.revisions.at(-1) || {}).id;
+  if (!revId) return;
+  const rev = state.revisions.find(r => r.id === revId);
+  if (rev) {
+    const m = [];
+    m.push(metric(rev.offset >= 0 ? '+' + rev.offset.toFixed(2) + 's' : rev.offset.toFixed(2) + 's', '偏移'));
+    m.push(metric(rev.confidence.toFixed(3), '置信度',
+                  rev.confidence >= 0.55 ? 'good' : 'bad'));
+    m.push(metric((rev.residual_summary || {}).suspect_count || 0, '可疑条目',
+                  (rev.residual_summary || {}).suspect_count ? 'warn' : 'good'));
+    m.push(metric(rev.cue_count, '字幕条数'));
+    $('metrics').innerHTML = m.join('');
+  }
+
+  const q = new URLSearchParams({ project: state.project, revision: revId });
+  if (zoomPct < 100) {
+    const span = rev ? rev.cue_count : 100;
+    q.set('start', '0');
+  }
+  const img = new Image();
+  img.onload = () => {
+    $('timeline').innerHTML = '';
+    $('timeline').appendChild(img);
+  };
+  img.onerror = () => { $('timeline').innerHTML = '<div class="empty">预览不可用</div>'; };
+  img.src = '/api/timeline.svg?' + q.toString();
+
+  try {
+    const d = await api('/api/diff?project=' + encodeURIComponent(state.project) +
+                        '&revision=' + encodeURIComponent(revId));
+    renderDiff(d.rows);
+    setStep(4);
+  } catch (e) { /* preview is best-effort */ }
+}
+
+function renderDiff(rows) {
+  const flagged = rows.filter(r => r.suspect).length;
+  $('diffCount').textContent = rows.length + ' 条 · ' + flagged + ' 条可疑';
+  const head = '<table><thead><tr><th>#</th><th>原时间</th><th>新时间</th>' +
+    '<th>位移</th><th>起始差</th><th>覆盖</th><th>文本</th></tr></thead><tbody>';
+  const body = rows.slice(0, 400).map(r => {
+    const after = r.after ? fmt(r.after[0]) : '—';
+    const delta = r.delta === null ? '—' :
+      (r.delta >= 0 ? '+' : '') + r.delta.toFixed(3) + 's';
+    const resid = r.residual === null ? '—' :
+      (r.residual >= 0 ? '+' : '') + r.residual.toFixed(2) + 's';
+    return `<tr class="${r.suspect ? 'suspect' : ''}">` +
+      `<td>${r.index}</td><td>${fmt(r.before[0])}</td><td>${after}</td>` +
+      `<td>${delta}</td><td>${resid}</td>` +
+      `<td>${r.coverage === null || r.coverage === undefined ? '—' : r.coverage.toFixed(2)}</td>` +
+      `<td class="txt">${esc(r.text)}</td></tr>`;
+  }).join('');
+  $('diff').innerHTML = head + body + '</tbody></table>';
+}
+
+// ---------- export ----------
+$('btnExport').onclick = async () => {
+  if (!state.project) return;
+  $('btnExport').disabled = true;
+  try {
+    const data = await api('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project: state.project,
+        allow_override: $('optOverride').checked,
+        skip_recheck: $('optSkipRecheck').checked
+      })
+    });
+    state.lastExport = data.export;
+    $('exportOut').classList.remove('hidden');
+    $('exportOut').textContent =
+      '写入：' + data.export.path + '\n' +
+      '条数：' + data.export.cue_count + '   字节：' + data.export.bytes + '\n' +
+      'sha256：' + data.export.sha256 + '\n' +
+      '复检：' + JSON.stringify(data.export.live_check, null, 2);
+    $('btnDownload').disabled = false;
+    setStep(5);
+    toast('已导出', 'ok');
+  } catch (e) {
+    toast('导出被拒绝：' + e.message, 'err');
+    $('exportOut').classList.remove('hidden');
+    $('exportOut').textContent = (e.payload?.code || 'ERROR') + '\n' + e.message +
+      (e.payload?.hint ? '\n\n' + e.payload.hint : '');
+  } finally {
+    $('btnExport').disabled = false;
+  }
+};
+
+$('btnDownload').onclick = () => {
+  if (!state.lastExport) return;
+  location.href = '/api/download?path=' + encodeURIComponent(state.lastExport.path);
+};
+
+$('btnReport').onclick = () => {
+  if (!state.project) return;
+  window.open('/api/report?project=' + encodeURIComponent(state.project), '_blank');
+};
+
+$('zoom').oninput = (e) => {
+  zoomPct = +e.target.value;
+  $('zoomLabel').textContent = zoomPct >= 100 ? '全部' : zoomPct + '%';
+};
+</script>
+</body>
+</html>

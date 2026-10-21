@@ -1,0 +1,17 @@
+subsync-bench
+Copyright (c) 2026 Vespera
+
+This product builds on and depends on ffsubsync:
+  https://github.com/smacke/ffsubsync
+  Copyright (c) 2018 Stephen Macke
+  Licensed under the MIT License.
+
+ffsubsync is used as an installed dependency, not vendored. No upstream source
+files are modified or redistributed in this repository. The alignment engine is
+invoked through its public Python entry point (ffsubsync.ffsubsync.make_parser
+and .run) and its documented CLI flags.
+
+Behavioural claims in README.md about ffsubsync 0.5.1 (ignored --min-score,
+success retval on silent reference, cue loss on framerate mis-detection) were
+measured against the released package and are reproducible with the fixtures in
+fixtures/.
