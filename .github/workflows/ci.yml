@@ -65,17 +65,9 @@ jobs:
 
       - name: verify fixtures actually exist
         # A skipped fixture must fail the build, not silently pass a green run
-        # with half the suite missing.
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          need = ["film.mp4", "silent.mp4", "truth.srt", "late.srt",
-                  "early.srt", "fps.srt"]
-          missing = [n for n in need if not (Path("fixtures/media")/n).exists()]
-          if missing:
-              raise SystemExit(f"fixtures missing: {missing}")
-          print("all fixtures present")
-          PY
+        # with half the suite missing. A script, not an inline heredoc: the
+        # windows-latest runner's default shell parses heredocs differently.
+        run: python tools/check_fixtures.py
 
       - name: tests
         run: pytest -q
