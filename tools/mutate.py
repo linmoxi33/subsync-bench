@@ -12,16 +12,29 @@ Methodology, deliberately strict:
   crash cannot leave a defect in the tree (this bit us before).
 * A mutant that survives is reported with the test ids that *should* have caught
   it, so the gap is actionable.
+
+Do not touch the working tree while this runs. It edits tracked files in place
+and restores them after each mutant, so a concurrent `git commit`, `git push` or
+remote verification will capture a deliberately broken file. `tools/push_api.py`
+refuses to publish a dirty tree for exactly this reason.
+
+Output is flushed per line so progress is visible when redirected to a file —
+without that, a 25-minute run appears to produce nothing until it ends.
 """
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+# Flush per line so a 25-minute run redirected to a file shows progress as it
+# goes instead of appearing to produce nothing until the end.
+print = functools.partial(print, flush=True)
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "subsync_bench"

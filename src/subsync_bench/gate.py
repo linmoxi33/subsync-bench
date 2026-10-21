@@ -181,7 +181,7 @@ def evaluate(
             )
         )
 
-    if False:
+    if cue_count_in != cue_count_out:
         findings.append(
             Finding(
                 "R6_CUE_LOSS",
