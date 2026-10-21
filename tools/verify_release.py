@@ -75,7 +75,7 @@ def main() -> int:
         # 2) hashes
         local = ROOT / "dist"
         if not local.exists():
-            print(f"FAIL: no local dist/ to compare against — run `python -m build`")
+            print("FAIL: no local dist/ to compare against — run `python -m build`")
             return 1
         for name in downloaded:
             local_f = local / name
@@ -128,7 +128,7 @@ def main() -> int:
 
         # 5) the exported timing must actually be right
         sys.path.insert(0, str(ROOT / "src"))
-        from subsync_bench import subio  # noqa: E402
+        from subsync_bench import subio
 
         truth = subio.load(media / "truth.srt").cues
         out = subio.load(proj / "out" / "late.synced.srt").cues
