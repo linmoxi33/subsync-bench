@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+# generated media fixtures are large and reproducible
+fixtures/media/
+# local demo projects
+_demo/
+_mutate_final.log
+_mutate*.log
